@@ -18,8 +18,7 @@ const app         = express();
 const executor    = new dxpl;
 const bodyParser  = require('body-parser');
 
-
-
+/*
 executor.register('$', function (data, context) {
     if(data && data.constructor == [].constructor) {
         data = data[0]
@@ -31,15 +30,19 @@ executor.register('$', function (data, context) {
 function decomposeArray(expresor) {
     return function (data) {
         var result = {};
+
         expresor.forEach(element => {
             if(typeof data[element] == 'undefined') {
                 throw new Error(`Prpoerty not found "${element}" while (${expresor.join(',')})`)
             }
             result[element] = data[element];
         });
+
         return result;
     }
 }
+
+
 
 
 executor.register('@', function(expresor) {
@@ -56,7 +59,18 @@ executor.register('@', function(expresor) {
 
         return result
     }
-})
+
+
+});
+
+*/
+
+executor.register('+', function(n1, n2) {
+
+   return [].constructor.prototype.map.call(arguments, Number).reduce((r,c) => {
+       return r +c
+   }, 0)
+});
 
 
 

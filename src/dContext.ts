@@ -1,30 +1,32 @@
 import dxpl from './dxpl';
+import { setImmediate } from 'timers';
+const signatureExpr =  /^([\w\/]+)(\([\w|,]+\))?$/;
 
 export default class dContext {
     public result:any;
-
+    
     constructor (public executor:dxpl) {
         this.result = {}
     }
 
-
+    /**
+     * @param root 
+     * Resuelve todas las keys dentro de un arreglo de instrucciones
+     * 
+     */
     resolve(root) {
         var resolvers = Object.keys(root);
 
         return new Promise((resolve, reject) => {
             let currIdx = 0;
             var self = this;
+            
             next();
 
             function next () {
                 if(currIdx == resolvers.length) {
-                    let result = {}
-                    Object.keys(self.result).forEach(r => {
-                        if(r.charAt(0) != '$') result[r] = self.result[r]
-                    });
-                    return resolve(result)        
+                    return resolve(self.getResultData())  
                 }
-
                 currIdx++;
 
                 self.execute( root[resolvers[currIdx -1]] )
@@ -43,8 +45,97 @@ export default class dContext {
     }
 
 
-   
+    getResultData() {
+        let result = {}
+        Object.keys(this.result).forEach(r => {
+            if(r.charAt(0) != '$') result[r] = this.result[r]
+        });
+        return result
+    }
 
+
+
+    resolveFirst(verbExpr) {
+    
+        return new Promise((resolve, reject) => {
+            if(typeof verbExpr == 'string') {
+                //resolve as string
+                let verb = this.executor.retrive(verbExpr);
+                setImmediate(() =>  resolve(verb));
+                return;
+            } else if(typeof verbExpr == 'object') {
+                if(verbExpr.constructor === [].constructor) {
+                    this.execute(verbExpr).then(verb => resolve(verb))
+                    return;
+                }
+            }
+
+            reject(new Error('Cant resolve: ' + JSON.stringify(verbExpr) + ' as a verb'));
+        });
+
+
+    }
+
+    execute(list) {
+        let self        = this;
+
+        return new Promise((resolve, reject) => {
+            let params  = list.slice(1);
+            let eParams = []
+            let gVerb   = null;
+
+            let endCall = () => {
+                let result =  gVerb.apply(self, eParams);
+                resolve(result);
+            }
+
+            let next = (eIdx) => {
+                return () => {
+                    console.log('eval:' + eIdx);
+                    if(eIdx == params.length) return endCall();
+                    let param = params[eIdx];
+
+
+
+                    if(typeof param == 'object') {
+                        if(param.constructor == [].constructor) {
+                            self.execute(param)
+                                .then(r => {
+                                    eParams[eIdx] = r
+                                    next(eIdx + 1)();
+                                })
+                                .catch(reject)
+                        }
+                    } else {
+                        eParams[eIdx] = param;
+                        next(eIdx +1 )();
+                    }
+                }
+            } 
+
+
+            self.resolveFirst(list[0]).then(verb => {
+                if(typeof verb != 'function') {
+                    throw new Error('Expression is not resolved as verb: ' + JSON.stringify(list[0]));
+                }
+                
+                gVerb = verb;
+                next(0)();
+
+            }).catch( err =>  {
+                reject(err)
+            })
+
+            
+
+           
+
+        });
+
+    }
+
+
+    /*
     execute(pragma) {
         return new Promise((resolve, reject) => {
             let currElement = 0;    
@@ -56,7 +147,7 @@ export default class dContext {
                     return resolve(currVal);
                 }
 
-                let element = pragma[currElement];
+                let element = pragma[currElement]
 
                 self.executeElement(element, currVal).then(result => {
                     currVal = result;
@@ -72,8 +163,10 @@ export default class dContext {
             next();
         });
     }
+    */ 
 
-
+    /*
+    
     executeElement(element, val) {
         return new Promise((resolve, reject) => {
             let caller:any = false;
@@ -81,11 +174,18 @@ export default class dContext {
             let wasArr:any;
 
            if(typeof element == 'string') {
-                var signature = element.split(':');
-                caller = this.executor.retrive( signature.shift() );
+                var signature = element.match(signatureExpr);
+                
+                if(!signature) {
+                    return reject(new Error(`Not a signature: "${element}"`))
+                }
 
+                //obtengo la función ejecutora
+                caller = this.executor.retrive( signature[1] );
+
+            
                 if(!caller) {
-                    reject(new Error('Caller not defined: "' + element + '"'))
+                    return reject(new Error('Caller not defined: "' + element + '"'))
                 }
 
                 if(signature.length) {
@@ -96,6 +196,8 @@ export default class dContext {
                         caller  = null
                     }
                 }
+
+
 
             } else if(typeof element == 'object' && element.constructor == [].constructor) {
                 wasArr = true
@@ -112,29 +214,27 @@ export default class dContext {
                 let result = caller(val, this)
 
                 if(result && typeof result.then == 'function') {
-                    
-                    return result.then(fResult => {
+                    result.then(fResult => {
                         if(wasArr && typeof fResult == 'function') {
-                            let finalResult = fResult(val, this);
-                            if(finalResult && typeof finalResult.then == 'function') {
-                                finalResult.then( r  => resolve(r) );
-                            } else {
-                                resolve(finalResult);
-                            }
-                            return;
+                            return fResult(val, this);
                         }
-                        resolve(fResult)
-                    })
+                        return fResult;
+                    });
+                }
 
-
-                } else {
-                    setImmediate( () =>  resolve(result))
-                }  
+                setImmediate( () =>  resolve(result))
             }
+
         });
 
+    
+
     }
+    */
 }
+
+
+
 
 
 
